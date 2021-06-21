@@ -1,0 +1,90 @@
+<limit-ip-list>
+  <div if={ isShow }>
+    <div class="ip-header">
+      <span class="ip-title">限制登录IP</span>
+      <img src="/img/add_icon.png" alt="" onclick={ addIpAddress }>
+    </div>
+    <div>
+      <div class="ip-wrap" each={ list, index in lists }>
+        <div class="ip-address" each={ item in list }>
+          <input type="number" value={item} min="0" max="255">
+        </div>
+        <img src="/img/delete.png" alt="" onclick={ deleteIpAddress }>
+      </div>
+    </div>
+  </div>
+  <script>
+    import '../sass/limit-ip-list.sass'
+    import { testUnenableNullData } from '../utils.js'
+
+    // 增加IP录入框
+    this.addIpAddress = () => {
+      const ipAdress = ['', '', '', '']
+      this.lists.push(ipAdress)
+    }
+
+    // 删除IP
+    this.deleteIpAddress = (evt) => {
+      const index = evt.item.index
+      this.lists.splice(index,1)
+      this.update()
+    }
+    
+    // 更新IP列表显隐，is_limit_by_ip字段 0：隐藏，1：显示
+    this.updateSelect = (value) => {
+      this.isShow = value === 1 ? true : false
+      this.update()
+    }
+
+    // 处理拼接IP，判断是否存在IP、是否更改
+    this.getValue = () => {
+      const ipWraps = this.root.querySelectorAll('.ip-wrap')
+      if (!ipWraps.length) {
+        if (this.isShow) { // isShow：true，启用了限制登录IP，则IP至少需要输入一个
+          testUnenableNullData('请输入至少一个IP！')
+          return false
+        } else {
+          return null
+        }
+      }
+      let values = ''
+      let regIP = /^((2[0-4]\d|25[0-5]|[01]?\d\d?)\.){3}(2[0-4]\d|25[0-5]|[01]?\d\d?)$/
+      for (let i = 0; i < ipWraps.length; i++) {
+        const ipWrap = ipWraps[i]
+        const inputs = ipWrap.querySelectorAll('input')
+        let inputIP= `${inputs[0].value}.${inputs[1].value}.${inputs[2].value}.${inputs[3].value}`
+        let isIP = regIP.test(inputIP)
+        if (!isIP) {
+          testUnenableNullData('请输入正确IP地址！')
+          return false
+        }
+        values += `;${inputIP}`
+      }
+      values = values.replace(';','')
+      if (values.length > 320) {
+        testUnenableNullData('输入长度超出限制！')
+        return false
+      }
+      return values
+    }
+
+    // 初始格式数据用于展示
+    this.initValue = () => {
+      let lists = []
+      if (opts.dataValue) {
+        let values = opts.dataValue.split(';')
+        for (let i = 0; i < values.length; i++) {
+          const value = values[i].split('.')
+          lists.push(value)
+        }
+      }
+      this.lists = lists
+    }
+
+    this.init = (opts) => {
+      this.initValue()
+    }
+
+    this.init(opts)
+  </script>
+</limit-ip-list>

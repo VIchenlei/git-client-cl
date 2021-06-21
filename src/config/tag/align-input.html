@@ -1,0 +1,52 @@
+<align-input>
+  <span class="title-input">车速上限(Km/h)</span>
+  <ul>
+    <li each={list in lists} data-id={list.key} ref={list.spy}>
+      <span>{list.title}</span>
+      <input type="text" value={list.speed} data-oldValue={list.speed} readonly={opts.readonly}>
+    </li>
+  </ul>
+  <script>
+    let self = this
+    let vehicleCate = xdata.metaStore.data.vehicle_category
+    this.lists = [
+      {key: 1, title: '人车速度', spy: 'rcspeed', speed: vehicleCate ? vehicleCate.get(1).over_speed : 0},
+      {key: 2, title: '料车速度', spy: 'lcspeed', speed: vehicleCate ? vehicleCate.get(2).over_speed : 0},
+      {key: 3, title: '特种车速度', spy: 'tzcspeed', speed: vehicleCate ? vehicleCate.get(3).over_speed : 0}
+    ]
+
+    this.initValue = (key) => {
+      if (this.speeds) {
+        let speeds = this.speeds
+        if (isNaN(this.speeds)) {
+          speeds = speeds.split(';')
+        }
+        for (let i = 0; i < this.lists.length; i++) {
+          let speed = speeds[i]
+          speed = isNaN(this.speeds) ? speed.split(',')[1] : speeds
+          this.lists[i].speed = parseInt(speed, 10)
+        }
+      } 
+    }
+
+    this.getValue = () => {
+      let speed = ''
+      this.lists.forEach(list => {
+        let root = self.refs[list['spy']]
+        let input = root.querySelector('input')
+        let key = list.key
+        let value = input.value
+        speed += `;${key},${value}`
+      })
+      speed = speed.replace(';', '')
+      return speed
+    }
+
+    this.init = (opts) => {
+      let speeds = opts.dataValue
+      this.speeds = speeds
+      this.initValue()
+    }
+    this.init(opts)
+  </script>
+</align-input>

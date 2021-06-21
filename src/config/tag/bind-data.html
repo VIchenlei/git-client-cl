@@ -1,0 +1,142 @@
+<bind-data class="bind-data">
+  <div class="mdc-form-field bind-data-box {opts.name}" tabindex="0" onfocusout={ handleFocusout }>
+    <div class="mdc-text-field demand-field" ref='content' data-mdc-auto-init="MDCTextField">
+      <input id={opts.idname}
+        class="mdc-text-field__input {opts.idname} {opts.classname}" 
+        type={opts.type}
+        ref='inputField' 
+        size={opts.size} 
+        placeholder={opts.placeholder} value={opts.riotValue ?
+        xdata.metaStore.getNameByID(opts.name, opts.riotValue) : opts.value} 
+        onkeyup={ doSearch }
+        onfocus={ showResult }
+        readonly={opts.readonly}>
+      <label for={opts.idname} ref='labelField' class="mdc-text-field__label">
+        <span>{labelText}</span>
+        <span>{ tips }</span>
+      </label>
+      <div if={!opts.readonly} class="mdc-text-field__bottom-line"></div>
+    </div>
+    <div class="choose">
+      <div class="choose-list">
+        <span each={ result in store } class="choose-list-content">
+          <span>{result.name}</span>
+          <span class="close" onclick={ deleteElement }>x</span>
+        </span>
+      </div>
+    </div>
+
+    <div if={isShowResultList} class="result-list">
+      <span if={ hasresult } class="list-item" each={ item, i in results } data-name={item} onclick={ chooseItem }
+        data-type={ item[name + '_id' ] } data-index={ i }>{ item.name }</span>
+      <span if={ !hasresult } class="tips"> 无符合条件的结果 </span>
+    </div>
+  </div>
+  <script>
+    import '../sass/bind-data.sass'
+    import Fuse from 'fuse.js'
+    import { clone } from '../../js/utils/utils.js'
+
+    this.isShowResultList = false
+    this.lists = null
+
+    this.deleteElement = (evt) => {
+      const type = opts.name === 'drivers' ? 'staff_id' : 'worktype_id'
+      let item = evt.item
+      let key = item.result[type]
+      this.store = this.store.filter(item => item[type] !== key)
+    }
+
+    this.chooseItem = (evt) => {
+      evt.stopPropagation()
+      let t = evt.currentTarget
+      let v = t.getAttribute('data-index')
+      let i = v && parseInt(v, 10)
+      this.isShowResultList = false
+      this.root.querySelector('input').value = ''
+      const type = opts.name === 'drivers' ? 'staff_id' : 'worktype_id'
+      let isExist = this.store && this.store.find(item => item[type] === this.backResult[i][type])
+      // isExist 用于判断this.store中是否已存在避免重复
+      !isExist && this.store.push(this.backResult[i])
+    }
+
+    this.handleFocusout = (evt) => {
+      let eleMent = this.root.querySelector('.bind-data-box')
+      let focusoutEl = evt.relatedTarget
+      if (!eleMent.contains(focusoutEl)) {
+        this.isShowResultList = false
+      }
+    }
+
+    // 输入聚集展示全部数据
+    this.showResult = () => {
+      if (opts.name === 'worktype') {
+        const worktypes = xdata.metaStore.data.worktype && Array.from(xdata.metaStore.data.worktype.values())
+        this.backResult = worktypes
+        this.results = worktypes
+        this.hasresult = worktypes && worktypes.length > 0 ? true : false
+        this.isShowResultList = true
+      }
+    }
+
+    this.doSearch = (evt) => {
+      let s = evt.target.value
+      let matchs = this.fuse.search(s)
+      if (matchs.length > 0) {
+        this.backResult = clone(matchs)
+        let dittoname = clone(matchs)
+        if (this.name.indexOf('staff') !== -1) {
+          dittoname.forEach(e => {
+            e.name = `${e.staff_id}-${e.name}-${xdata.metaStore.getNameByID('dept_id', e.dept_id)}`
+          })
+          this.results = dittoname
+        } else {
+          this.results = dittoname
+        }
+        this.hasresult = matchs.length > 0 ? true : false
+        this.isShowResultList = true
+      }
+      if (s === '') {
+        this.isShowResultList = false
+      }
+    }
+
+    this.inputBlur = () => {
+      this.results = null
+      this.hasresult = false
+      this.isShowResultList = false
+    }
+
+    this.getSearchData = () => {
+      this.lists = opts.name === 'drivers' ? Array.from(xdata.metaStore.staffs.values()) : Array.from(xdata.metaStore
+        .data.worktype.values())
+      this.keys = opts.name === 'drivers' ? ['name', 'spy', 'staff_id'] : ['worktype_id', 'name', 'spy']
+    }
+
+    this.getLists = () => {
+      if (!['drivers', 'worktype'].includes(opts.name)) return
+      const results = opts.riotValue || []
+      this.store = results
+    }
+
+    this.init = (opts) => {
+      this.getLists()
+      this.labelText = opts.text
+      this.tips = ''
+      this.name = opts.name === 'drivers' ? 'staffs' : 'worktype'
+      this.getSearchData()
+      let fuse_opts = {
+        threshold: 0,
+        minMatchCharLength: 1,
+        location: 0,
+        tokenize: true,
+        matchAllTokens: true,
+        keys: this.keys
+      }
+      this.fuse = new Fuse(this.lists, fuse_opts)
+    }
+
+    this.init(opts)
+
+  </script>
+</bind-data>

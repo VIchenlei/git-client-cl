@@ -1,0 +1,379 @@
+<role-dialog>
+  <div class="dlg-bg animated" show={isShow}>
+    <div name="meta_dialog" ref="meta_dialog" class="dlg-window meta-dialog role-dialog animated">
+      <div name="meta_title" ref="meta_title" class="dlg-head">
+        <span class="dlg-title">
+          <grip type="grip-horizontal"></grip>{ tableTitle }
+        </span>
+      </div>
+      <div class="dlg-body">
+        <div data-is="dialog-table" class="dialog-table content-panel" data={ data }></div>
+      </div>
+      <div class="dlg-foot">
+        <button op-name="save-update" class="btn-sure" onclick={ save }>{cmd == 'DELETE' ? '删除' : '保存'}</button>
+        <button op-name="cancel-update" class="btn-cancel" onclick={ close }>取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import {show, formatFieldValue, testUnenableNullData, metaUpdateRes, isReadonly, isDisabled} from '../utils.js'
+    import {composeUpdateDBReq, encrypt} from '../../js/utils/utils.js'
+    import './checkbox-role.html'
+    import './align-input.html'
+    import './dialog-table.html'
+    let msg = opts.message
+    this.isShow = true
+    this.data = msg
+    this.data.from = 'role'
+    this.tableTitle = msg.title
+    this.tableKeyName = msg.key
+    this.tableName = msg.table
+    this.topicName = msg.name
+    this.rows = msg.rows
+    this.cmd = msg.cmd
+    this.fromPage = ''
+    this.checkboxes = ['menus', 'depts', 'access_id', 'business_type']
+    if(msg.hasOwnProperty('fromPage')){
+       this.fromPage = msg.fromPage
+    }
+
+    this.isDisabled = () => {
+      return isDisabled(this.tableName,'',this.tableKeyName,this.cmd)
+    }
+
+    this.isReadonly = (field_name) => {
+      return isReadonly(this.tableName,field_name,this.tableKeyName,this.cmd)
+    }
+
+    this.registerGlobalEventHandlers = () => {
+      xbus.on('META-UPDATE-DB-RES', (res) => {
+        let updateRes = metaUpdateRes(res, this.topicName, this.cmd)
+        if (updateRes) {
+          this.close()
+        } 
+      })
+    }
+
+    this.formShow = () => {
+      if (this.cmd === 'INSERT') return
+      let roleRank = this.rows[2].field_value
+      if (roleRank !== 2) return
+      this.refs['menus'] && this.refs['menus'].root.classList.remove('hide')
+    }
+
+    this.on('mount', () => {
+      this.formShow()
+      show(this.root.querySelector('.dlg-window'), this.root.querySelector('.dlg-bg'))
+      window.setDraggable({
+        target: this.refs.meta_dialog,
+        handle: this.refs.meta_title
+      })
+
+      this.registerGlobalEventHandlers()
+    })
+
+    this.getMenus = (ele, type, fieldName) => {
+      let fieldValue = ''
+      if (!ele.root.classList.contains('hide')) {
+        if (fieldName === 'business_type') {
+          fieldValue = ele.getBusiness()
+        } else {
+          let menus = ele.menus && Array.from(ele.menus.keys())
+          fieldValue = menus && menus.join(';')
+        }
+      }
+      return fieldValue
+    }
+
+    this.md5 = (pwd) => {
+      let row = this.tags['dialog-table'].rows[0]
+      let fieldName = row['field_name']
+      let ele = this.tags['dialog-table'].refs[fieldName]
+      let username = ele.root.querySelector('input').value
+      return encrypt(username, pwd)
+    }
+
+    this.doBelongInsert = (keyValue) => {
+      let rows = this.tags['dialog-table'].refs['area_att_rule'] && this.tags['dialog-table'].refs['area_att_rule'].showStore
+      rows = rows && Array.from(rows.keys())
+      let insertSql = `INSERT INTO dat_att_rule_area (area_id, att_rule_id) VALUES (${keyValue}, ${rows[0]})`
+      let req = composeUpdateDBReq('INSERT', 'att_rule_area', keyValue, insertSql)
+      xbus.trigger('META-UPDATE-DB', {
+        req: req
+      })
+    }
+
+    this.doBelongUpdate = (keyValue, cmd) => {
+      let rows = this.tags['dialog-table'].refs['area_att_rule'] && this.tags['dialog-table'].refs['area_att_rule'].showStore
+      rows = rows && Array.from(rows.keys())
+      let updateSql = null
+      if (cmd === 'UPDATE') {
+        updateSql = `replace into dat_att_rule_area (att_rule_id, area_id) values (${rows[0]},${keyValue})`
+      } else {
+        updateSql = `delete from dat_att_rule_area where area_id =${keyValue}`
+      }
+      let req = composeUpdateDBReq('UPDATE', 'att_rule_area', keyValue, updateSql)
+      xbus.trigger('META-UPDATE-DB', {
+        req: req
+      })
+    }
+
+    this.doBelongDelete = (keyValue) => {
+      let rows = this.tags['dialog-table'].refs['area_att_rule'] && this.tags['dialog-table'].refs['area_att_rule'].showStore
+      rows = rows && Array.from(rows.keys())
+      let deleteSql = `DELETE from dat_att_rule_area where area_id =${keyValue}`
+      let req = composeUpdateDBReq('DELETE', 'att_rule_area', keyValue, deleteSql)
+      xbus.trigger('META-UPDATE-DB', {
+        req: req
+      })
+    }
+
+    this.doInsert = () => {
+      let keyValue = null, fields = '', values = '', overPersonRp = null
+      for (let i = 0; i < this.tags['dialog-table'].rows.length; i++) {
+        let row = this.tags['dialog-table'].rows[i]
+        let fieldName = row['field_name']
+        let fieldValue = null
+        let fieldType = this.tags['dialog-table'].rows[i].field_type
+        let ele = this.tags['dialog-table'].refs[fieldName]
+        if (this.checkboxes.includes(fieldName)) {
+          fieldValue = this.getMenus(ele, fieldType, fieldName)
+          if (!fieldValue) return
+          fieldValue = formatFieldValue(fieldType, fieldValue)
+        } else if (fieldName === 'over_speed_vehicle') {
+          fieldValue = ele.getValue()
+          fieldValue = formatFieldValue(fieldType, fieldValue)
+        } else if (fieldName === 'limit_ip_list') {
+          fieldValue = ele.getValue()
+          if (fieldValue === null) continue
+          if (fieldValue === false) return
+          fieldValue = formatFieldValue(fieldType, fieldValue)
+        } else if (fieldName === 'is_check' && xdata.isCheck === 1) {
+          fieldValue = 1
+        } else {
+          if (!ele) continue
+          ele = ele.root.querySelector('input')
+          let value = ele && ele.value
+          if (this.tags['dialog-table'].rows[i].field_type === 'SELECT') {
+            fieldValue =this.tags['dialog-table'].root.querySelector('.' + fieldName+ ' select').getAttribute('value')
+            fieldValue =this.tags['dialog-table'].root.querySelector('.' + fieldName+ ' select').value
+            if (!fieldValue || !fieldValue.match(/\d/ig)) {
+              fieldValue = 0
+            }
+          } else {
+            fieldValue = value
+            if (fieldName === 'pwd') fieldValue = this.md5(fieldValue)
+            fieldValue = formatFieldValue(this.tags['dialog-table'].rows[i].field_type, fieldValue)
+          }
+          if (xdata.isCheck === 1 && fieldName === 'over_count_person_rp') overPersonRp = fieldValue
+          if(this.tags['dialog-table'].refs[fieldName].tips && fieldValue !== 0 && (!fieldValue || fieldValue === '""')){//如果是必填字段但是没有值时
+            return testUnenableNullData()
+          }
+          if (i === 0) {
+            keyValue = fieldValue
+          }
+        }
+        if (this.tableName === 'dat_area' && fieldName === 'area_att_rule') {   
+          let areaTypeID = this.tags['dialog-table'].refs['area_type_id'].root.querySelector('select').value
+          let businessID = this.tags['dialog-table'].refs['business_type'].getBusiness()
+          let businessType = (businessID).toString(2).padStart(12, 0).split('').reverse()
+          let isVehicleArea = businessType[5] == 1 ? true : false
+          let rows = this.tags['dialog-table'].refs['area_att_rule'] && this.tags['dialog-table'].refs['area_att_rule'].showStore
+          rows = rows && Array.from(rows.keys())
+          if (!rows[0] && isVehicleArea) {
+            return testUnenableNullData('车辆考勤区域请选择区域考勤规则！')
+          } else if (rows[0]) {
+            this.doBelongInsert(keyValue)
+          } else if(!rows[0] && Number(areaTypeID) === 6){
+            return testUnenableNullData()
+          }
+          continue
+        }
+
+        fields += ','
+        values += ','
+        fields += fieldName
+        values += fieldValue
+      }
+      fields = fields.replace(',', '')
+      values = values.replace(',', '')
+      if (xdata.isCheck === 1 && this.tableName === 'dat_area') {
+        fields += ','
+        values += ','
+        fields += 'over_count_person'
+        values += overPersonRp
+      }
+      let sql = `INSERT into ${this.tableName} (${fields}) VALUES(${values})`
+      // console.log(sql)
+      this.metaUpdate('INSERT', keyValue, sql)
+    }
+
+    this.doUpdate = () => {
+      let sql = '', keyele = this.tags['dialog-table'].refs[this.tableKeyName].root.querySelector('input'), keyValue = keyele && keyele.value
+      for (let i = 0; i < this.tags['dialog-table'].rows.length; i++) {
+        let fieldName = this.tags['dialog-table'].rows[i].field_name, inputValue = null
+        let ele = this.tags['dialog-table'].refs[fieldName]
+        let value = null
+        //dat_area中的geom是允许为空的，正常添加的话会更新失败
+        if (fieldName === 'geom' && this.tableName === 'dat_area') {
+          continue
+        }
+        if (this.tableName === 'dat_area' && fieldName === 'area_att_rule') {
+          let oldAreaTypeID = this.rows[2].field_value
+          let areaTypeID = this.tags['dialog-table'].refs['area_type_id'].root.querySelector('select').value
+          let businessID = this.tags['dialog-table'].refs['business_type'].getBusiness()
+          let businessType = (businessID).toString(2).padStart(12, 0).split('').reverse()
+          let isVehicleArea = businessType[5] == 1 ? true : false
+          let rows = this.tags['dialog-table'].refs['area_att_rule'] && this.tags['dialog-table'].refs['area_att_rule'].showStore
+          rows = rows && Array.from(rows.keys())
+          if (!rows[0] && isVehicleArea) {
+            return testUnenableNullData('车辆考勤区域请选择区域考勤规则！')
+          } else if (!isVehicleArea){
+            let updateKeyValue = this.tags['dialog-table'].refs[this.tableKeyName].opts.riotValue
+            this.doBelongUpdate(updateKeyValue, 'DELETE')
+            sql += `,area_id =${updateKeyValue}`
+          } else if (rows[0]) {
+            let updateKeyValue = this.tags['dialog-table'].refs[this.tableKeyName].opts.riotValue
+            this.doBelongUpdate(updateKeyValue, 'UPDATE')
+            sql += `,area_id =${updateKeyValue}`
+          } else if(!rows[0] && Number(areaTypeID) === 6){
+            return testUnenableNullData()
+          }
+          continue
+        }
+
+        if (this.checkboxes.includes(fieldName)) {
+          value = this.getMenus(ele, this.tags['dialog-table'].rows[i].field_type, fieldName)
+          if (!value) return
+        } else if (fieldName === 'over_speed_vehicle') {
+          // || fieldName === 'related_x' || fieldName === 'related_y' || fieldName === 'related_z'
+          value = ele.getValue()
+        } else if (fieldName === 'limit_ip_list') {
+          const limitIpList = this.rows.find(item => item.field_name === fieldName)
+          value = ele ? ele.getValue() : limitIpList.field_value
+          if (value === null) continue
+          if (value === false) return
+        } else if (fieldName === 'is_check' && xdata.isCheck === 1) {
+          value = this.tags['dialog-table'].rows[i].field_value
+        } else {
+          if (!ele) continue
+          ele = ele.root.querySelector('input')
+          value = ele && ele.value
+          if (this.tags['dialog-table'].rows[i].field_type === 'SELECT') {
+            value = this.tags['dialog-table'].refs[fieldName].root.querySelector('select').value
+          }
+          if(this.tags['dialog-table'].refs[fieldName].tips && value !==0 && !value){//如果是必填字段但是没有值时
+            return testUnenableNullData()
+          }
+        }
+        if ((fieldName !== 'menus' && this.tags['dialog-table'].rows[i].field_value != value) || (fieldName === 'menus' && `'${this.tags['dialog-table'].rows[i].field_value}'` != value) || ['related_x', 'related_y', 'related_z'].includes(fieldName)) {
+          if (fieldName === 'pwd') value = this.md5(value)
+          inputValue = formatFieldValue(this.tags['dialog-table'].rows[i].field_type, value)
+          sql += `,${fieldName}=${inputValue}`
+        }
+      }
+      //区域里面在实时地图上修改图形后
+      let isAreaId = ! xdata.metaStore.data.area.get(opts.message.maxid) ? false : true
+      if(this.tableName === 'dat_area' && isAreaId && this.fromPage === 'monitor'){
+        for (let i = 0; i < this.tags['dialog-table'].rows.length; i++) {
+          if (this.tags['dialog-table'].rows[i].field_name === 'path' && sql.indexOf('path') < 0) {
+            sql += `,${this.tags['dialog-table'].rows[i].field_name}='${this.tags['dialog-table'].rows[i].field_value}'`
+          }
+        }
+      }
+      if (!sql) {
+        let msg = {
+          value: 'nochange',
+          tip: '数据没有修改，请确认后再提交！'
+        }
+        window.hintip.open(msg)
+        return
+      } else {
+        sql = sql.replace(',', '')
+        if (this.tableKeyName === 'user_id') keyValue = `'${keyValue}'`
+        sql = `UPDATE ${this.tableName} set ${sql} where ${this.tableKeyName}=${keyValue}`
+        
+        this.metaUpdate('UPDATE', keyValue, sql)
+      }
+    }
+
+    this.deleteMsg = () => {
+      let keyele = this.tags['dialog-table'].refs[this.tableKeyName].root.querySelector('input')
+      let keyValue = keyele && keyele.value
+      if (this.tableKeyName === 'user_id') keyValue = `'${keyValue}'`
+      if (this.tableName === 'dat_area') {
+        this.doBelongDelete(keyValue)
+      }
+      let sql = `DELETE FROM ${this.tableName} WHERE ${this.tableKeyName}=${keyValue}`
+      this.metaUpdate('DELETE', keyValue, sql)
+    }
+    this.deletePopup = (evt) => { //弹窗提醒删除
+        let self = this
+        if (this.activePanel) {
+            this.activePanel.unmount(true)
+        }
+        this.activePanel = riot.mount('call-leave', { 
+            name: 'dodelete',
+            currentTag: self
+        })[0]
+    }
+    this.deleteRole = () => {
+      this.deletePopup(this.tableName)
+      return
+      //this.deleteMsg()
+    }
+    this.save = () => {
+      if (this.cmd === 'INSERT') this.doInsert()
+      if (this.cmd === 'UPDATE') this.doUpdate()
+      if (this.cmd === 'DELETE') this.deleteRole()
+    }
+
+    this.init = (opts) => {
+      if (this.tableName === 'dat_area') {
+        let areaTypeID = this.rows[2].field_value
+        this.selectedIndex = Number(areaTypeID)
+      }
+    }
+    this.init(opts)
+
+    this.close = () => {
+      //实时地图便更新
+      if (this.tableName === 'dat_area' && this.fromPage === 'monitor') {
+        xbus.trigger('MAP-SHOW-AREA', {
+            areas: [this.rows[0].field_value],
+            mapID: 5,
+            mapType: 'MONITOR',
+            isVisible: true,
+            visiblearea: 'area_' + this.rows[2].field_value,
+            fromPage:this.fromPage
+          })
+      }
+      this.unmount(true)
+      xbus.off('META-UPDATE-DB-RES')
+    }
+
+    this.metaUpdate = (cmd,value,sql) => {
+      let req = composeUpdateDBReq(cmd, this.topicName, value, sql)
+      xbus.trigger('META-UPDATE-DB', {
+        req: req
+      })
+    }
+
+    this.updateData = (rows) => {
+      this.isShow = true
+      this.data.rows = rows
+      this.update()
+      this.tags['dialog-table'] && this.tags['dialog-table'].update() 
+    }
+
+    xbus.on('UPDATE-ROLE-ROWS', (msg)=> {
+      this.updateData(msg.rows)
+    })
+
+    xbus.on('DIALOG-SHOW', (msg) => {
+      this.isShow = msg.isShow
+      this.update()
+    })
+  </script>
+</role-dialog>

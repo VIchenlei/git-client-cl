@@ -1,0 +1,17 @@
+@import '../../sass/defs'
+
+.detail-dialog
+    // width: 96rem
+    max-width: 90%
+    max-height: 90%
+    @media screen and (max-width: $width-medium)
+        @include wh(100%,100%)
+    .dlg-body
+        background: #eee
+        .search-bar
+            .search-box
+                width: 5rem
+            .popup-list
+                width: inherit
+                max-width: 14rem
+                min-width: 10.5rem

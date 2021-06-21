@@ -1,0 +1,53 @@
+@import '../../sass/defs'
+.bind-data
+  position: relative
+  .bind-data-box
+    outline: none
+    input 
+      width: 12rem
+    .result-list
+      position: absolute  
+      width: 100%
+      max-height: 13rem
+      overflow: auto
+      background: #f5f5f5
+      z-index: 999
+      top: 21px
+      .list-item
+        display: block
+        width: 100%
+        text-align: center
+        line-height: 30px
+        border-bottom: 1px solid #fff
+        overflow: hidden
+        text-overflow: ellipsis
+        white-space: nowrap
+        cursor: pointer
+  .choose
+    position: absolute
+    z-index: 999
+    margin: 4px 0
+    top: 21px
+    .choose-list
+      width: 12rem
+      white-space: nowrap
+      overflow-y: auto
+      font-size: 12px
+      color: #fff
+      .choose-list-content
+        background: #0099ff
+        padding: 2px 6px
+        margin: 0 4px
+        border-radius: 14px
+        .close
+          cursor: pointer
+    .choose-list::-webkit-scrollbar
+      height: 5px
+      background-color: #B3B3B3
+    .choose-list::-webkit-scrollbar-thumb
+      border-radius: 10px
+      width: 2px
+      background-color: #555
+    .choose-list::-webkit-scrollbar-track
+      border-radius: 10px
+      background-color: #B3B3B3

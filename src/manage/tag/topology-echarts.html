@@ -1,0 +1,214 @@
+<topology-echarts onclick={ doHide }>
+    <div class="search-title">
+        <select-input idname="reader-topology" 
+            class="facename" 
+            name="reader-topology" 
+            ref="reader-topology" 
+            data-type="all" 
+            onchange={ change }>
+        </select-input>
+        <span class="reader-topology-search"></span>
+    </div>
+
+    <div class="summary-title">
+        <div>
+            <span>总数：{summaryNum.sum}；</span>
+            <span>直流供电：{summaryNum.charge}；</span>
+            <span>离线：{summaryNum.destroy}</span>
+        </div>
+    </div>
+
+    <div class="topology-content" onclick={ showDetail }>
+        <div each={ row in subRows }>
+            <span class="topology-desc">{ row.name }</span>
+            <ul>
+                <li each={ item in row.readers.split(';') } class="reader_{item}">
+                    <i class={ getReader(item, 'icon') }></i>
+                    <span>{ getReader(item, 'name') }</span>
+                </li>
+            </ul>
+        </div>
+    </div> 
+
+    <div data-is="tool-tips" class="tool-tips-container hide"></div>
+
+  <script>
+    import '../sass/topology-echarts.sass'
+    import '../../tags/fuzzy-search2.html'
+
+    import { concatAreaReader, compare } from '../../js/utils/utils.js'
+
+    this.root.classList.remove('hide')
+    let readers = xdata.metaStore.data.reader && Array.from(xdata.metaStore.data.reader.values())
+
+    this.doHide = (evt) => {
+        evt.stopPropagation()
+        this.tags['tool-tips'].close()
+    }
+
+    this.showDetail = (evt) => {
+        evt.stopPropagation()
+        const target = evt.target
+        const targetNode = target.nodeName
+        let chooseNode = target
+        if (targetNode === 'I' || targetNode === 'SPAN') {
+            chooseNode = target.parentElement
+        }
+        const readerID = chooseNode.className.replace('reader_', '')
+        if (!readerID || isNaN(readerID)) return this.doHide(evt)
+        const deviceInfoDef = xdata.metaStore.defs.reader
+        const deviceInfo = xdata.metaStore.data.reader.get(parseInt(readerID, 10))
+        const boundingClientRect = target.getBoundingClientRect()
+        const coordinate = [boundingClientRect.x, boundingClientRect.y]
+        let msg = {
+            type: 'DEVICE',
+            subtype: 'reader',
+            id: readerID,
+            event: evt,
+            state: {
+                def: xdata.deviceStore.getStateDefs(),
+                rec: xdata.deviceStore.getState(readerID, deviceInfo.device_type_id)
+            },
+            info: {
+                def: deviceInfoDef,
+                rec: xdata.metaStore.formatRecord(deviceInfoDef, deviceInfo, null)
+            },
+            coordinate: coordinate,
+            notShowLand: true,
+            notShowPath: true
+        }
+        xbus.trigger('MAP-TOOLTIPS-SHOW', msg)
+    }
+
+    this.dealReaders = (rows, lineLiNum, sortRule) => {
+        const subRows = []
+        const msg = [...rows]
+        while (msg.length) {
+            const spliceRow = msg.splice(0, lineLiNum)
+            const start = spliceRow[0][sortRule]
+            const end = spliceRow[spliceRow.length - 1][sortRule]
+            const spliceReaders = spliceRow.reduce((acc, cur) => {
+                return acc ? `${acc};${cur.reader_id}` : cur.reader_id
+            }, '')
+            subRows.push({
+                name: `${start} ~ ${end}`,
+                readers: spliceReaders
+            })
+        }
+        return subRows
+    }
+
+    this.change = (evt) => {
+        const selectIndex = evt ? evt.target.selectedIndex : this.root.querySelector('select').selectedIndex
+        if (selectIndex === 0) {
+            this.calRowNumber()
+        } else {
+            const contentEle = this.root.querySelector('.topology-content')
+            const contentWidth = contentEle.clientWidth
+            const descWidth = contentEle.querySelector('span').clientWidth
+            const liWidth = contentEle.querySelector('ul').querySelector('li').clientWidth
+            const lineLiNum = Math.floor((contentWidth - descWidth) / liWidth)
+
+            const sortRule = selectIndex === 1 ? 'reader_id' : 'ip'
+            const sortReaders = readers.sort(compare(sortRule))
+            this.subRows = this.dealReaders(sortReaders, lineLiNum, sortRule)
+        }
+    }
+
+    this.getReader = (item, desc) => {
+        if (item) {
+            const readerID = parseInt(item, 10)
+            const reader = xdata.metaStore.data.reader.get(readerID)
+            if (desc === 'icon') {
+                let alarm = ''
+                const deviceType = xdata.metaStore.data.device_type
+                const { device_type_id } = reader
+                const readerDevice = deviceType.get(device_type_id)
+                const chargeReader = Array.from(this.chargeReaders.values()).some(item => parseInt(item.obj_id, 10) === readerID)
+                const destroyReader = Array.from(this.destroyReaders.values()).some(item => parseInt(item.obj_id, 10) === readerID)
+                if (chargeReader) alarm = 'charge'
+                if (destroyReader) alarm = 'destroy'
+                
+                return readerDevice && `${readerDevice.name}${alarm}`
+            } else if (desc === 'name') {
+                return `${readerID}-${xdata.metaStore.getNameByID('reader_id', readerID)}`
+            }
+        }
+    }
+
+    this.summary = () => {
+        let sum = 0
+        const self = this
+        const alarms = xdata.alarmStore.onAlarming && Array.from(xdata.alarmStore.onAlarming.values())
+        
+        if (alarms) {
+            alarms.filter(item => {
+                const { obj_type_id, type_id, obj_id } = item
+                if (obj_type_id === 4) {
+                    type_id === 6 ? self.destroyReaders.set(obj_id, item) : self.chargeReaders.set(obj_id, item)
+                }
+            })
+        }
+        return {
+            sum: readers ? readers.length : 0,
+            charge: Array.from(this.chargeReaders.values()).length,
+            destroy: Array.from(this.destroyReaders.values()).length
+        }
+    }
+
+    this.getResult = (result) => {
+        const oldEle = this.root.querySelector(`.reader_${this.searchReaderID}`)
+        oldEle && oldEle.classList.remove('active')
+        if (result.length === 1) {
+            const reader = result[0]
+            const {reader_id, name} = reader
+            this.root.querySelector('#searchinput').value = name
+            const newEle = this.root.querySelector(`.reader_${reader_id}`)
+            newEle && newEle.classList.add('active')
+            this.searchReaderID = reader_id
+        }
+    }
+
+    this.calRowNumber = () => {
+        this.subRows = concatAreaReader()
+        this.update()
+    }
+
+    this.registerGlobalEventHandlers = () => {
+        xbus.on('ALARM-LIST-CHANGED', () => {
+            this.init()
+            this.change()
+        })
+    }
+
+    this.on('mount', () => {
+        let typeDef = {
+            name: 'reader',
+            label: '分站',
+            placeholder: '请输入分站ID、名称',
+            cb: this.getResult  // the callback when select an item.
+        }
+        let dataSet = {
+            desc: 'name',  // 显示结果集时，显示的字段：一般为描述字段
+            keys: ['reader_id', 'name', 'spy'],  // 参与搜索的列名称
+            data: xdata.metaStore.data.reader && Array.from(xdata.metaStore.data.reader.values())
+        }
+        this.fuzz = riot.mount('span.reader-topology-search', 'fuzzy-search2', { typeDef: typeDef, dataSet: dataSet, searchIcon: true })[0]
+
+        this.calRowNumber()
+        this.registerGlobalEventHandlers()
+    })
+
+    this.init = () => {
+        this.chargeReaders = new Map() // 供电告警分站
+        this.destroyReaders = new Map() // 通信异常分站
+        this.summaryNum = this.summary()
+    }
+    this.init()
+
+    this.on('unmount', () => {
+        this.root.classList.add('hide')
+        readers = null
+    })
+  </script>
+</topology-echarts>

@@ -1,0 +1,116 @@
+<rules-choose>
+  <div if={ isShow }>
+    <div class="rules-choose-top">
+        <span class="choose-title">{opts.text}</span>
+        <span style="color:red;"> * </span>
+        <span class="hint--top-right" aria-label="添加信息" onclick={ insert }>
+          <svg class="icon black-icon"><use xlink:href="/icons/icons.svg#icon-add"></use></svg>
+        </span>
+        <span class="identify-search-{name} choose-search"></span>
+    </div>
+    <div class="rules-choose-bottom">
+      <span each={list in lists} class="choose-list">
+        <span>{list.name}</span>
+        <img src="/img/close.png" alt="" class="icon" data-type={list.att_rule_id} onclick={ deleteChoode }>
+      </span>
+    </div>
+  </div>
+  <script>
+    import {clone} from '../../js/utils/utils.js'
+    import '../sass/rules-choose.sass'
+
+    xbus.on('RULE-CHANGE', (message)=> {
+      let number = message.isShow ? 6 : 5 // 6 显示 5不显示
+      this.updateSelect(number)
+    })
+
+    this.updateSelect = (businesses) => {
+      if (businesses !== 6) {
+        this.isShow = false
+        this.showStore = new Map()
+        this.lists = null
+        this.fuzz = null
+      } else {
+        this.isShow = true
+      }
+      this.update()
+    }
+
+    this.deleteChoode = (evt) => {
+      let target = evt.currentTarget
+      let dataType = target.getAttribute('data-type')
+      dataType = parseInt(dataType, 10)
+      this.showStore.delete(dataType)
+      this.lists = Array.from(this.showStore.values())
+      this.update()
+    }
+
+    this.showChoose = () => {
+      let name = 'att_rule'
+      let label = '考勤规则'
+      let rows = xdata.metaStore.data.att_rule
+      rows = rows && Array.from(rows.values())
+      this.typeDef = {
+        name: name,
+        label: label,
+        placeholder: '考勤规则名称/简拼/ID',
+        cb: this.getResult  // the callback when select an item.
+      }
+      this.dataSet = {
+        desc: 'name',
+        keys: ['name', 'spy', 'att_rule_id' ],
+        data: rows
+      }
+      this.fuzz = riot.mount(`span.identify-search-${this.name}`, 'fuzzy-search2', { typeDef: this.typeDef, dataSet: this.dataSet, searchIcon: false })[0]
+      this.update()
+    }
+
+    this.getResult = (result) => {
+      if (result && this.root.querySelector('#searchinput').value) {
+        let key = 'att_rule_id'
+        key = result[0][key]
+        this.showStore = new Map() //清空showStore，当前只可选一个
+        this.showStore.set(key, result[0])
+        this.lists = Array.from(this.showStore.values())
+      }
+      this.update()
+    }
+
+    this.insert = (evt) => {
+      if (!this.fuzz) this.showChoose()
+    }
+
+    this.init = (opts) => {
+      this.lists = []
+      this.name = opts.name
+      this.showStore = new Map()
+      this.isShow = true
+      let message = this.parent.parent.opts.message
+      let metaName = message && message.name
+      let key = message && message.key
+      let keyID = message.rows[0].field_value
+      let storeName = null
+      if (metaName === 'area') {
+        storeName = 'att_rule_area'
+        let areaTypeId = message.rows[2].field_value
+        let businessType = (message.rows[3].field_value).toString(2).padStart(12, 0).split('').reverse()
+        this.isShow = (areaTypeId === 6 || businessType[5] == 1)  ? true : false
+      } else {
+        storeName = 'att_rule_vehicle_type'
+      }
+      if (keyID) {
+        let storeRules = xdata.metaStore.data[storeName] && Array.from(xdata.metaStore.data[storeName].values())
+        if (!storeRules) return
+        let rules = storeRules && storeRules.filter(it => it[key] === keyID)
+        let arrRoleStore = xdata.metaStore.data.att_rule
+        for (let i = 0; i < rules.length; i++) {
+          let attRuleID = rules[i].att_rule_id
+          let attRuleObj = arrRoleStore && arrRoleStore.get(attRuleID)
+          this.showStore.set(attRuleID, attRuleObj)
+          this.lists.push(attRuleObj)
+        }
+      }
+    }
+    this.init(opts)
+  </script>
+</rules-choose>
